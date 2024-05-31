@@ -47,6 +47,8 @@
 
 /* LwIP Stack Parameters (modified compared to initialization value in opt.h) -*/
 /* Parameters set in STM32CubeMX LwIP Configuration GUI -*/
+/*----- Default Value for LWIP_IGMP: 0 ---*/
+#define LWIP_IGMP 1
 /*----- Value in opt.h for MEM_ALIGNMENT: 1 -----*/
 #define MEM_ALIGNMENT 4
 /*----- Value in opt.h for LWIP_ETHERNET: LWIP_ARP || PPPOE_SUPPORT -*/

@@ -344,6 +344,16 @@ static void low_level_init(struct netif *netif)
 #endif /* LWIP_ARP || LWIP_ETHERNET */
 
 /* USER CODE BEGIN LOW_LEVEL_INIT */
+#if LWIP_IGMP
+  		netif->flags |= NETIF_FLAG_IGMP; //in low_level_init function
+  		ETH_MACFilterConfigTypeDef pFilterConfig;
+  		pFilterConfig.PassAllMulticast = ENABLE;
+  		pFilterConfig.PromiscuousMode = ENABLE;
+
+  		HAL_ETH_SetMACFilterConfig(&heth, &pFilterConfig);
+  	#endif
+int a = READ_BIT(heth.Instance->MACFFR, ETH_MACFFR_RA);
+int b = READ_BIT(heth.Instance->MACFFR, ETH_MACFFR_PAM);
 
 /* USER CODE END LOW_LEVEL_INIT */
 

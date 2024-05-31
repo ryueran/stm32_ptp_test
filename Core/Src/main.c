@@ -20,7 +20,6 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "lwip.h"
-#include "api.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -503,10 +502,14 @@ static void udp_server_recv_callback(void *arg, struct udp_pcb *pcb, struct pbuf
 static void udp_thread(void *arg)
 {
 	// Create a new UDP PCB (protocol control block) for the echo server
+			struct ip4_addr ipgroup, localIP;
+			IP4_ADDR(&ipgroup, 224, 0, 1, 129 ); //Multicast IP address.
+			IP4_ADDR(&localIP, 192, 168, 0, 108); //Interface IP address
+			s8_t iret = igmp_joingroup(IP_ADDR_ANY,(ip4_addr_t *)(&ipgroup));
 		    struct udp_pcb *udp_server_pcb = udp_new();
 		    if (udp_server_pcb != NULL) {
 		        // Bind the UDP PCB to the specified port
-		        if (udp_bind(udp_server_pcb, IP_ADDR_ANY, 319) == ERR_OK) {
+		        if (udp_bind(udp_server_pcb, IP_ADDR_ANY, 5007) == ERR_OK) {
 		            // Set up the callback function for receiving UDP packets
 		            udp_recv(udp_server_pcb, udp_server_recv_callback, NULL);
 		        } else {
