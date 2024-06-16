@@ -349,7 +349,6 @@ static void low_level_init(struct netif *netif)
   		ETH_MACFilterConfigTypeDef pFilterConfig;
   		pFilterConfig.PassAllMulticast = ENABLE;
   		pFilterConfig.PromiscuousMode = ENABLE;
-
   		HAL_ETH_SetMACFilterConfig(&heth, &pFilterConfig);
   	#endif
 int a = READ_BIT(heth.Instance->MACFFR, ETH_MACFFR_RA);

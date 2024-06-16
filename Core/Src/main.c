@@ -20,10 +20,13 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "lwip.h"
-
+#include "lwip/udp.h"
+#include "FreeRTOS.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <mes_type_parser.h>
+#include <ptp_state_machine.h>
+#include <thread_safe_queue.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +55,8 @@ UART_HandleTypeDef huart3;
 PCD_HandleTypeDef hpcd_USB_OTG_FS;
 
 osThreadId defaultTaskHandle;
+xTaskHandle task_udp_set_handle;
+xTaskHandle task_udp_get_handle;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -65,7 +70,6 @@ static void MX_USB_OTG_FS_PCD_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_RTC_Init(void);
 void StartDefaultTask(void const * argument);
-
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -85,6 +89,103 @@ char smsg[200];
   * @brief  The application entry point.
   * @retval int
   */
+// UDP echo server callback function
+static void udp_server_recv_callback(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
+    // Process received UDP packet
+    if (p != NULL) {
+        // Print received data (for demonstration purposes)
+        printf("Received UDP packet from IP: %s, Port: %d\n", ip4addr_ntoa(addr), port);
+        /*Push received message to message queue*/
+        struct MessageQueue *m_queue = (struct MessageQueue*)pcb->recv_arg;
+        m_queue->addr.addr = addr->addr;
+        m_queue->port = port;
+        m_queue->udp_instace = pcb;
+        // �?试将接收到的 pbuf 放入队列
+        m_queue->enqueue(&m_queue->pbufQueue, p);
+        /*End push received message to message queue*/
+//        udp_sendto(pcb, p, addr, port);
+        pbuf_free(p); //如果不free的話綫程棧就會被耗盡進去default_handler
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+/*UDP Server function*/
+static void udp_thread(MessageQueue* m_queue)
+{
+	// Create a new UDP PCB (protocol control block) for the echo server
+			struct ip4_addr ipgroup, localIP;
+			IP4_ADDR(&ipgroup, 224, 0, 1, 129 ); //Multicast IP address.
+			IP4_ADDR(&localIP, 192, 168, 0, 108); //Interface IP address
+			s8_t iret = igmp_joingroup(IP_ADDR_ANY,(ip4_addr_t *)(&ipgroup));
+		    struct udp_pcb *udp_server_pcb = udp_new();
+		    if (udp_server_pcb != NULL) {
+		        // Bind the UDP PCB to the specified port
+		        if (udp_bind(udp_server_pcb, IP_ADDR_ANY, 319) == ERR_OK) {
+		            // Set up the callback function for receiving UDP packets
+		            udp_recv(udp_server_pcb, udp_server_recv_callback, m_queue);
+		        } else {
+		            // Error handling: failed to bind UDP port
+		        }
+		    } else {
+		        // Error handling: failed to create UDP PCB
+		    }
+
+		    // Main loop (optional)
+		    struct ptp_state_info ptp_info = {INIT, state_transition};
+		    while (1) {
+		        // Main application logic goes here
+		    	struct pbuf *p;
+		    	if (m_queue->dequeue(&m_queue->pbufQueue, &p) &&
+		    			m_queue->addr.addr != 0 &&
+						m_queue->port != 0 &&
+						m_queue->udp_instace != NULL)
+		    	{
+		    		uint8_t mes_type = read_message_type(&p->payload);
+		    		// Echo the received data back to the client
+		    		/*Move to consumer*/
+		    		if (mes_type == ANNOUNCE)
+		    		{
+		    			MsgAnnounce annouce = {0};
+		    			read_announce_message(&annouce, &p->payload);
+		    			ptp_info.state_trans(ptp_info.state, mes_type);
+		    		}
+		    		/*Move to consumer*/
+		    		udp_sendto(udp_server_pcb, p, &m_queue->addr, m_queue->port);
+		    		// Free the received pbuf
+		    		pbuf_free(p);
+		    		printf("UdpProcessorTask started\n");
+		    	}
+		    }
+
+}
+
+static void consumerTask(MessageQueue* m_queue) {
+	printf("UdpProcessorTask started\n");
+    while (1) {
+//    	struct pbuf *p;
+//        if (m_queue->dequeue(&m_queue->pbufQueue, &p) && m_queue->addr->addr != 0 && m_queue->port != 0 && m_queue->udp_instace != NULL) {
+//        	uint8_t mes_type = read_message_type(&p->payload);
+//        	// Echo the received data back to the client
+//        	/*Move to consumer*/
+//        	if (mes_type == ANNOUNCE)
+//        	{
+//        	   	MsgAnnounce annouce = {0};
+//        	   	read_announce_message(&annouce, &p->payload);
+//        	   	ptp_info.state_trans(ptp_info.state, mes_type);
+//        	}
+//        	/*Move to consumer*/
+//        	if (udp_bind(udp_pcb, IP_ADDR_ANY, 319) == ERR_OK)
+//        	{
+//        		udp_sendto(udp_pcb, p, m_queue->addr, m_queue->port);
+//        	}
+//        	// Free the received pbuf
+//        	pbuf_free(p);
+//        }
+    	printf("UdpProcessorTask started\n");
+    	vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 int main(void)
 {
 
@@ -126,7 +227,6 @@ int main(void)
   MX_TIM2_Init();
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
-
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -149,9 +249,7 @@ int main(void)
   /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 1024);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
-
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* Start scheduler */
@@ -482,54 +580,6 @@ void print_timestamp(void const * argument) {
 	// �?��?到 UART
 	HAL_UART_Transmit(&huart3, (uint8_t*)timestamp, strlen(timestamp), HAL_MAX_DELAY);
 }
-
-// UDP echo server callback function
-static void udp_server_recv_callback(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
-    // Process received UDP packet
-    if (p != NULL) {
-        // Print received data (for demonstration purposes)
-        printf("Received UDP packet from IP: %s, Port: %d\n", ip4addr_ntoa(addr), port);
-
-        // Echo the received data back to the client
-        udp_sendto(pcb, p, addr, port);
-
-        // Free the received pbuf
-        pbuf_free(p);
-    }
-}
-
-/*UDP Server function*/
-static void udp_thread(void *arg)
-{
-	// Create a new UDP PCB (protocol control block) for the echo server
-			struct ip4_addr ipgroup, localIP;
-			IP4_ADDR(&ipgroup, 224, 0, 1, 129 ); //Multicast IP address.
-			IP4_ADDR(&localIP, 192, 168, 0, 108); //Interface IP address
-			s8_t iret = igmp_joingroup(IP_ADDR_ANY,(ip4_addr_t *)(&ipgroup));
-		    struct udp_pcb *udp_server_pcb = udp_new();
-		    if (udp_server_pcb != NULL) {
-		        // Bind the UDP PCB to the specified port
-		        if (udp_bind(udp_server_pcb, IP_ADDR_ANY, 5007) == ERR_OK) {
-		            // Set up the callback function for receiving UDP packets
-		            udp_recv(udp_server_pcb, udp_server_recv_callback, NULL);
-		        } else {
-		            // Error handling: failed to bind UDP port
-		        }
-		    } else {
-		        // Error handling: failed to create UDP PCB
-		    }
-
-		    // Main loop (optional)
-		    while (1) {
-		        // Main application logic goes here
-		    }
-}
-
-void udpserver_init(void)
-{
-  sys_thread_new("udp_thread", udp_thread, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
-}
-
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -544,8 +594,25 @@ void StartDefaultTask(void const * argument)
   /* init code for LWIP */
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
-  /*UDP Init*/
-  udpserver_init();
+  /* Create UDP server thread */
+  /*Init Message queue*/
+  Queue queue;
+  struct MessageQueue m_q = {
+    		  .init = initQueue,
+   		      .enqueue = enqueue,
+       		  .dequeue = dequeue,
+       		  .pbufQueue = queue,
+  	  	  	  .udp_instace = NULL,
+  	  	  	  .addr = NULL,
+  	  	  	  .port = 0};
+  m_q.init(&m_q.pbufQueue);
+//      /*End init of message queue*/
+//     // xTaskCreate(udp_thread, "receive_task", 1024, &m_q, osPriorityNormal, &task_udp_set_handle);
+//      xTaskCreate(consumerTask, "process_task", 1024, &m_q, osPriorityNormal, &task_udp_get_handle);
+//  osThreadDef(readTask, consumerTask, osPriorityBelowNormal, 0, configMINIMAL_STACK_SIZE);
+//  osThreadCreate (osThread(readTask), &m_q);
+  osThreadDef(writeTask, udp_thread, osPriorityBelowNormal, 0, configMINIMAL_STACK_SIZE);
+  osThreadCreate (osThread(writeTask), &m_q);
   /* Infinite loop */
   for(;;)
   {
