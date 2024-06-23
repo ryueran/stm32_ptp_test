@@ -33,7 +33,7 @@
 
 /* Within 'USER CODE' section, code will be kept by default at each generation */
 /* USER CODE BEGIN 0 */
-
+#include "stm32f7xx_hal_eth.h"
 /* USER CODE END 0 */
 
 /* Private define ------------------------------------------------------------*/
@@ -350,10 +350,28 @@ static void low_level_init(struct netif *netif)
   		pFilterConfig.PassAllMulticast = ENABLE;
   		pFilterConfig.PromiscuousMode = ENABLE;
   		HAL_ETH_SetMACFilterConfig(&heth, &pFilterConfig);
-  	#endif
-int a = READ_BIT(heth.Instance->MACFFR, ETH_MACFFR_RA);
-int b = READ_BIT(heth.Instance->MACFFR, ETH_MACFFR_PAM);
 
+  		ETH_PTP_ConfigTypeDef ptp_config = {
+  		    .Timestamp = 0, /*!< Enable Timestamp */
+  		    .TimestampUpdateMode = 1, /*!< Fine or Coarse Timestamp Update */
+  		    .TimestampInitialize = 0, /*!< Initialize Timestamp */ // Does nothing
+  		    .TimestampUpdate = 1, /*!< Timestamp Update */
+  		    .TimestampAddendUpdate = 1, /*!< Timestamp Addend Update */
+  		    .TimestampAll = 1, /*!< Enable Timestamp for All Packets */
+  		    .TimestampRolloverMode = 1, /*!< Timestamp Digital or Binary Rollover Control */
+  		    .TimestampV2 = 1, /*!< Enable PTP Packet Processing for Version 2 Format */
+  		    .TimestampEthernet = 1, /*!< Enable Processing of PTP over Ethernet Packets */
+  		    .TimestampIPv6 = 0, /*!< Enable Processing of PTP Packets Sent over IPv6-UDP*/
+  		    .TimestampIPv4 = 0, /*!< Enable Processing of PTP Packets Sent over IPv4-UDP*/
+  		    .TimestampEvent = 1, /*!< Enable Timestamp Snapshot for Event Messages */
+  		    .TimestampMaster = 0, /*!< Enable Timestamp Snapshot for Event Messages */
+  		    .TimestampFilter = 0, /*!< Enable MAC Address for PTP Packet Filtering */
+  		    .TimestampAddend = 886862695, /*!< Timestamp addend value */
+  		    .TimestampSubsecondInc = 40,
+  		};
+
+  		assert(HAL_OK == HAL_ETH_PTP_SetConfig(&heth, &ptp_config));
+#endif
 /* USER CODE END LOW_LEVEL_INIT */
 
   if(HAL_GetREVID() == 0x1000)

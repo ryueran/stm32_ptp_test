@@ -27,6 +27,7 @@
 #include <mes_type_parser.h>
 #include <ptp_state_machine.h>
 #include <thread_safe_queue.h>
+#include <timer_reader.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -113,6 +114,8 @@ static void udp_server_recv_callback(void *arg, struct udp_pcb *pcb, struct pbuf
 static void udp_thread(MessageQueue* m_queue)
 {
 	// Create a new UDP PCB (protocol control block) for the echo server
+			ETH_TimeTypeDef *time;
+			getTime_Wrapper(&heth, time);
 			struct ip4_addr ipgroup, localIP;
 			IP4_ADDR(&ipgroup, 224, 0, 1, 129 ); //Multicast IP address.
 			IP4_ADDR(&localIP, 192, 168, 0, 108); //Interface IP address
@@ -134,6 +137,11 @@ static void udp_thread(MessageQueue* m_queue)
 		    struct ptp_state_info ptp_info = {INIT, state_transition};
 		    while (1) {
 		        // Main application logic goes here
+		    	Timestamp_message t1 = {0};
+		    	ETH_TimeTypeDef t2 = {0};
+		    	Timestamp_message t3 = {0};
+		    	Timestamp_message t4 = {0};
+
 		    	struct pbuf *p;
 		    	if (m_queue->dequeue(&m_queue->pbufQueue, &p) &&
 		    			m_queue->addr.addr != 0 &&
@@ -143,11 +151,21 @@ static void udp_thread(MessageQueue* m_queue)
 		    		uint8_t mes_type = read_message_type(&p->payload);
 		    		// Echo the received data back to the client
 		    		/*Move to consumer*/
-		    		if (mes_type == ANNOUNCE)
+//		    		if (mes_type == ANNOUNCE)
+//		    		{
+//		    			MsgAnnounce annouce = {0};
+//		    			read_announce_message(&annouce, &p->payload);
+//		    			ptp_info.state_trans(ptp_info.state, mes_type);
+//		    		}
+
+		    		if (mes_type == SYNC)
 		    		{
-		    			MsgAnnounce annouce = {0};
-		    			read_announce_message(&annouce, &p->payload);
-		    			ptp_info.state_trans(ptp_info.state, mes_type);
+		    			MsgSync sync = {0};
+		    			read_sync_message(&sync, p->payload);
+		    			t1.secondsField = sync.originTimestamp.secondsField;
+		    			t1.nanosecondsField = sync.originTimestamp.nanosecondsField;
+		    			getTime_Wrapper(&heth, &t2);
+		    			int a = 1;
 		    		}
 		    		/*Move to consumer*/
 		    		udp_sendto(udp_server_pcb, p, &m_queue->addr, m_queue->port);

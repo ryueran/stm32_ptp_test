@@ -52,7 +52,7 @@ typedef struct
 
 typedef struct
 {
-		int48_bit secondsField;
+		uint32_t secondsField;
 		uint32_t nanosecondsField;
 } Timestamp_message;
 
@@ -72,8 +72,18 @@ typedef struct
 		uint8_t timeSource;
 }MsgAnnounce;
 
+/**
+ * \brief Sync message fields (Table 25 of the spec)
+ */
+
+typedef struct
+{
+	Timestamp_message originTimestamp;
+}MsgSync;
+
 uint8_t read_message_type(void **payload);
 
 void read_announce_message(MsgAnnounce *announce, void **payload);
+void read_sync_message(MsgSync *sync, void *payload);
 
 #endif /* INC_MES_TYPE_PARSER_H_ */
